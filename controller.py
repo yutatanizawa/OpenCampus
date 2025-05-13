@@ -38,6 +38,34 @@ def read_game_code():
         print(f"game.pyの読み取り中にエラーが発生しました: {e}")
         return ""
 
+def restore_latest_backup():
+    """
+    最新のバックアップを復元する。
+    """
+    try:
+        # ログディレクトリ内のバックアップファイルを取得
+        backups = [f for f in os.listdir(LOG_DIR) if f.startswith("game_backup_") and f.endswith(".py")]
+        if not backups:
+            print("バックアップが見つかりません。復元できませんでした。")
+            return False
+
+        # 最新のバックアップを選択
+        latest_backup = max(backups, key=lambda f: os.path.getmtime(os.path.join(LOG_DIR, f)))
+        latest_backup_path = os.path.join(LOG_DIR, latest_backup)
+
+        # 最新のバックアップをgame.pyに復元
+        with open(latest_backup_path, "r") as backup_file:
+            backup_code = backup_file.read()
+
+        with open(GAME_FILE_PATH, "w") as game_file:
+            game_file.write(backup_code)
+
+        print(f"最新のバックアップを復元しました: {latest_backup_path}")
+        return True
+    except Exception as e:
+        print(f"バックアップ復元中にエラーが発生しました: {e}")
+        return False
+
 def modify_game_code(prompt):
     """
     OpenAI APIを使ってgame.pyを変更する。
@@ -83,14 +111,42 @@ def modify_game_code(prompt):
 def restart_game():
     """
     ゲームを再起動する。
+    ゲームが起動しなかった場合、最新のバックアップを復元して再試行する。
     """
-    # 現在のゲームプロセスを終了
-    subprocess.run(["pkill", "-f", "python.*game.py"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    time.sleep(1)  # 少し待機
+    try:
+        # 現在のゲームプロセスを終了
+        subprocess.run(["pkill", "-f", "python.*game.py"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        time.sleep(1)  # 少し待機
 
-    # ゲームを再起動
-    subprocess.Popen(["python3", GAME_FILE_PATH], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    print("ゲームを再起動しました。")
+        # ゲームを再起動
+        process = subprocess.Popen(["python3", GAME_FILE_PATH], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        time.sleep(3)  # 起動を待機
+
+        # プロセスが終了している場合はエラーとみなす
+        if process.poll() is not None:
+            stdout, stderr = process.communicate()
+            print("ゲームが起動しませんでした。エラーメッセージ:")
+            print(stderr.decode().strip())
+
+            # 最新のバックアップを復元
+            print("最新のバックアップを復元します...")
+            if restore_latest_backup():
+                print("復元が完了しました。再起動を試みます...")
+                # バックアップを復元した後に再起動を試みる
+                process = subprocess.Popen(["python3", GAME_FILE_PATH], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                time.sleep(3)
+                if process.poll() is not None:
+                    stdout, stderr = process.communicate()
+                    print("バックアップを使用してもゲームが起動しませんでした。エラーメッセージ:")
+                    print(stderr.decode().strip())
+                else:
+                    print("バックアップを使用してゲームが正常に起動しました。")
+            else:
+                print("バックアップの復元に失敗しました。ゲームを起動できませんでした。")
+        else:
+            print("ゲームが正常に起動しました。")
+    except Exception as e:
+        print(f"ゲームの再起動中にエラーが発生しました: {e}")
 
 def main():
     print("ゲームコントローラーが起動しました。")
