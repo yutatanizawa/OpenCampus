@@ -1,175 +1,209 @@
-from openai import OpenAI
-import openai
-import os
+import tkinter as tk
+from tkinter import simpledialog, messagebox
+from threading import Thread
 import subprocess
+import os, re
+import sys
 import time
-import datetime 
+import traceback
+from openai import OpenAI
 
-# # OpenAI APIキーの設定
-openai.api_key = os.getenv("OPENAI_API_KEY")  # 環境変数から取得
-client = OpenAI(api_key=openai.api_key)
+# --- Settings ---
+GAME_FILE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "game.py"))
+LOG_DIR = os.path.join(os.path.dirname(GAME_FILE_PATH), "log")
+openai_api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=openai_api_key)
 
-# game.pyのパス
-GAME_FILE_PATH = "/mnt/c/workspace/OpenCampus/game.py"
-LOG_DIR = "/mnt/c/workspace/OpenCampus/log"
-
-def save_backup_code(code: str):
-    """
-    game.pyの現在のコードをログに保存する。
-    """
+# --- Backup/Restore ---
+def save_backup_code():
     try:
         os.makedirs(LOG_DIR, exist_ok=True)
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_file_path = os.path.join(LOG_DIR, f"game_backup_{timestamp}.py")
-        with open(log_file_path, "w") as log_file:
-            log_file.write(code)
-        print(f"バックアップを保存しました: {log_file_path}")
+        with open(GAME_FILE_PATH, "r") as f:
+            code = f.read()
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        backup_path = os.path.join(LOG_DIR, f"game_backup_{timestamp}.py")
+        with open(backup_path, "w") as f:
+            f.write(code)
+        print(f"Backup saved: {backup_path}")
     except Exception as e:
-        print(f"バックアップ保存中にエラーが発生しました: {e}")
-
-def read_game_code():
-    """
-    game.pyのコードを読み取る。
-    """
-    try:
-        with open(GAME_FILE_PATH, "r") as game_file:
-            return game_file.read()
-    except Exception as e:
-        print(f"game.pyの読み取り中にエラーが発生しました: {e}")
-        return ""
+        print(f"Error saving backup: {e}")
 
 def restore_latest_backup():
-    """
-    最新のバックアップを復元する。
-    """
     try:
-        # ログディレクトリ内のバックアップファイルを取得
         backups = [f for f in os.listdir(LOG_DIR) if f.startswith("game_backup_") and f.endswith(".py")]
         if not backups:
-            print("バックアップが見つかりません。復元できませんでした。")
+            print("No backup found.")
             return False
-
-        # 最新のバックアップを選択
-        latest_backup = max(backups, key=lambda f: os.path.getmtime(os.path.join(LOG_DIR, f)))
-        latest_backup_path = os.path.join(LOG_DIR, latest_backup)
-
-        # 最新のバックアップをgame.pyに復元
-        with open(latest_backup_path, "r") as backup_file:
-            backup_code = backup_file.read()
-
-        with open(GAME_FILE_PATH, "w") as game_file:
-            game_file.write(backup_code)
-
-        print(f"最新のバックアップを復元しました: {latest_backup_path}")
+        latest = max(backups, key=lambda f: os.path.getmtime(os.path.join(LOG_DIR, f)))
+        backup_path = os.path.join(LOG_DIR, latest)
+        with open(backup_path, "r") as f:
+            code = f.read()
+        with open(GAME_FILE_PATH, "w") as f:
+            f.write(code)
+        print(f"Restored backup: {backup_path}")
         return True
     except Exception as e:
-        print(f"バックアップ復元中にエラーが発生しました: {e}")
+        print(f"Error restoring backup: {e}")
         return False
 
-def modify_game_code(prompt):
-    """
-    OpenAI APIを使ってgame.pyを変更する。
-    """
+# --- AI Code Modification ---
+def ai_modify_code(prompt):
+    save_backup_code()
     try:
-        # game.pyの現在のコードを読み取る
-        current_code = read_game_code()
-
-        save_backup_code(current_code)
-
-        # OpenAI APIにリクエストを送信
+        with open(GAME_FILE_PATH, "r") as f:
+            current_code = f.read()
         response = client.chat.completions.create(
-            model="gpt-4o-mini",  # 使用するモデルを指定
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant for modifying Python game code."},
-                {"role": "user", "content": f"The current game.py code is:\n\n{current_code}\n\nModify it based on the following instruction:\n{prompt}\n\nPlease output only the modified full Python code. Do not include any explanations or comments unless they are part of the code itself."},
-                {"role": "assistant", "content": "Sure! Here is the modified code:"}
+                {"role": "user", "content": f"The current game.py code is:\n\n{current_code}\n\nModify it based on the following instruction:\n{prompt}\n\nPlease output only the modified full Python code. Do not include any explanations or comments unless they are part of the code itself."}
             ],
             max_tokens=3000,
             temperature=0.7
         )
-        # 出力を取得して行に分割
         lines = response.choices[0].message.content.strip().splitlines()
-
-        # 1行目に "python" を含んでいれば削除
         if lines and "```python" in lines[0].lower():
             lines = lines[1:]
-        # 最後の行に ``` が含まれる場合、その行を削除
         if lines and lines[-1].strip() == "```":
             lines = lines[:-1]
-
         new_code = "\n".join(lines)
-
-        # game.pyを更新
-        with open(GAME_FILE_PATH, "w") as game_file:
-            game_file.write(new_code)
-
-
-        print("game.pyが更新されました。")
+        with open(GAME_FILE_PATH, "w") as f:
+            f.write(new_code)
+        return True, ""
     except Exception as e:
-        print(f"エラーが発生しました: {e}")
+        tb = traceback.format_exc()
+        return False, f"{e}\n{tb}"
+
+# --- Game Process Management ---
+game_process = None
+
+def start_game():
+    global game_process
+    if game_process and game_process.poll() is None:
+        messagebox.showinfo("Info", "Game is already running.")
+        return
+    try:
+        game_process = subprocess.Popen([sys.executable, GAME_FILE_PATH])
+        print("Game started.")
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to start game: {e}")
+
+def stop_game():
+    global game_process
+    if game_process and game_process.poll() is None:
+        game_process.terminate()
+        game_process.wait()
+        print("Game stopped.")
 
 def restart_game():
-    """
-    ゲームを再起動する。
-    ゲームが起動しなかった場合、最新のバックアップを復元して再試行する。
-    """
-    try:
-        # 現在のゲームプロセスを終了
-        subprocess.run(["pkill", "-f", "python.*game.py"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        time.sleep(1)  # 少し待機
-
-        # ゲームを再起動
-        process = subprocess.Popen(["python3", GAME_FILE_PATH], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        time.sleep(3)  # 起動を待機
-
-        # プロセスが終了している場合はエラーとみなす
-        if process.poll() is not None:
-            stdout, stderr = process.communicate()
-            print("ゲームが起動しませんでした。エラーメッセージ:")
-            print(stderr.decode().strip())
-
-            # 最新のバックアップを復元
-            print("最新のバックアップを復元します...")
-            if restore_latest_backup():
-                print("復元が完了しました。再起動を試みます...")
-                # バックアップを復元した後に再起動を試みる
-                process = subprocess.Popen(["python3", GAME_FILE_PATH], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                time.sleep(3)
-                if process.poll() is not None:
-                    stdout, stderr = process.communicate()
-                    print("バックアップを使用してもゲームが起動しませんでした。エラーメッセージ:")
-                    print(stderr.decode().strip())
-                else:
-                    print("バックアップを使用してゲームが正常に起動しました。")
+    stop_game()
+    time.sleep(1)
+    start_game()
+    # Check if game started successfully
+    time.sleep(2)
+    if game_process.poll() is not None:
+        messagebox.showerror("Error", "Game failed to start. Restoring latest backup...")
+        if restore_latest_backup():
+            start_game()
+            time.sleep(2)
+            if game_process.poll() is not None:
+                messagebox.showerror("Error", "Even after restoring backup, the game failed to start.")
             else:
-                print("バックアップの復元に失敗しました。ゲームを起動できませんでした。")
+                messagebox.showinfo("Restored", "Backup restored and game started.")
         else:
-            print("ゲームが正常に起動しました。")
-    except Exception as e:
-        print(f"ゲームの再起動中にエラーが発生しました: {e}")
+            messagebox.showerror("Error", "No backup available to restore.")
 
-def main():
-    print("ゲームコントローラーが起動しました。")
-    print("以下のコマンドを使用できます:")
-    print("1. modify: ゲームコードを変更")
-    print("2. restart: ゲームを再起動")
-    print("3. exit: コントローラーを終了")
-
-    while True:
-        command = input("\nコマンドを入力してください: ").strip().lower()
-
-        if command == "modify":
-            user_prompt = input("ゲームコードを変更するための指示を入力してください: ")
-            modify_game_code(user_prompt)
-        elif command == "restart":
+# --- Tkinter UI ---
+def ai_modify_action():
+    prompt = simpledialog.askstring("AI Code Modification", "Enter your instruction for code modification (e.g., Double the jump strength):")
+    if not prompt:
+        return
+    ok = messagebox.askyesno("Confirmation", "Do you want to execute AI code modification?\n(If it fails, the latest backup will be restored automatically.)")
+    if not ok:
+        return
+    success, err = ai_modify_code(prompt)
+    if success:
+        messagebox.showinfo("Success", "AI code modification completed. The game will restart.")
+        restart_game()
+    else:
+        messagebox.showerror("Error", f"AI modification failed: {err}\nRestoring from backup.")
+        if restore_latest_backup():
+            messagebox.showinfo("Restored", "Restored from backup. The game will restart.")
             restart_game()
-        elif command == "exit":
-            print("コントローラーを終了します。")
-            break
         else:
-            print("無効なコマンドです。")
+            messagebox.showerror("Restore Failed", "Failed to restore from backup. Please fix manually.")
 
-if __name__ == "__main__":
-    main()
+def on_close():
+    stop_game()
+    root.destroy()
 
+# --- Live View Variables ---
+live_vars = {
+    "Gravity": 0.0,
+    "Jump Strength": 0.0,
+    "Obstacle Width": 0,
+    "Obstacle Height": 0,
+    "Dino Color": "(0, 0, 0)",
+    "Speed Multiplier": 0.0,
+}
 
+def update_live_vars_from_code():
+    try:
+        with open(GAME_FILE_PATH, "r") as f:
+            code = f.read()
+        # Extract values using regex
+        patterns = {
+            "Gravity": r"GRAVITY\s*=\s*([-\d\.]+)",
+            "Jump Strength": r"JUMP_STRENGTH\s*=\s*([-\d\.]+)",
+            "Obstacle Width": r"OBSTACLE_SIZE\s*=\s*\[([-\d\.]+),\s*([-\d\.]+)\]",
+            "Obstacle Height": r"OBSTACLE_SIZE\s*=\s*\[([-\d\.]+),\s*([-\d\.]+)\]",
+            "Dino Color": r"DINO_COLOR\s*=\s*\(([\d\s,]+)\)",
+            "Speed Multiplier": r"SPEED_MULTIPLIER\s*=\s*([-\d\.]+)",
+        }
+        for key, pat in patterns.items():
+            m = re.search(pat, code)
+            if m:
+                if key == "Obstacle Width":
+                    live_vars[key] = float(m.group(1))
+                elif key == "Obstacle Height":
+                    live_vars[key] = float(m.group(2))
+                elif key == "Dino Color":
+                    live_vars[key] = f"({m.group(1)})"
+                else:
+                    live_vars[key] = float(m.group(1))
+    except Exception as e:
+        print(f"Error updating live vars: {e}")
+
+def refresh_live_view():
+    update_live_vars_from_code()
+    for key, var in live_vars.items():
+        live_labels[key].config(text=f"{key}: {var}")
+
+def open_live_view():
+    global live_labels
+    live_view = tk.Toplevel()
+    live_view.title("LIVE View - Game Settings")
+    live_labels = {}
+    for key in live_vars:
+        lbl = tk.Label(live_view, text=f"{key}: {live_vars[key]}", font=("Arial", 12))
+        lbl.pack(anchor="w")
+        live_labels[key] = lbl
+    def periodic_refresh():
+        if not live_view.winfo_exists():
+            return
+        refresh_live_view()
+        live_view.after(1000, periodic_refresh)
+    periodic_refresh()
+
+root = tk.Tk()
+root.title("Dino Game Controller")
+root.protocol("WM_DELETE_WINDOW", on_close)
+
+tk.Button(root, text="Start Game", command=start_game, width=20).pack(pady=5)
+tk.Button(root, text="Stop Game", command=stop_game, width=20).pack(pady=5)
+tk.Button(root, text="Restart Game", command=restart_game, width=20).pack(pady=5)
+tk.Button(root, text="AI Code Modify", command=ai_modify_action, width=20).pack(pady=5)
+tk.Button(root, text="Exit", command=on_close, width=20).pack(pady=5)
+tk.Button(root, text="LIVE View", command=open_live_view, width=20).pack(pady=5)
+
+root.mainloop()

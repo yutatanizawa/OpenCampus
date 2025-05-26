@@ -1,27 +1,12 @@
 import pygame
-import tkinter as tk
-from threading import Thread, Event
-import random
+import sys
 
-# What the setting is
-GRAVITY = 0.5
-JUMP_STRENGTH = -50  # Changed from -10 to -50
+# --- Game Settings ---
+GRAVITY = 1.0  # Doubled gravity
+JUMP_STRENGTH = -12.5  # Changed jump strength to half
 OBSTACLE_SIZE = [20, 40]
 DINO_COLOR = (0, 0, 0)
 SPEED_MULTIPLIER = 1.0
-COLOR_OPTIONS = [(0,0,0), (0,128,0), (0,0,255), (255,165,0)]
-COLOR_INDEX = 0
-
-exit_event = Event()
-
-def get_game_code():
-    return f"""# Dino Game Code Snapshot
-GRAVITY = {GRAVITY}
-JUMP_STRENGTH = {JUMP_STRENGTH}
-OBSTACLE_SIZE = {tuple(OBSTACLE_SIZE)}
-DINO_COLOR = {DINO_COLOR}
-SPEED_MULTIPLIER = {round(SPEED_MULTIPLIER, 2)}
-"""
 
 def run_game():
     global GRAVITY, JUMP_STRENGTH, OBSTACLE_SIZE, DINO_COLOR, SPEED_MULTIPLIER
@@ -49,12 +34,11 @@ def run_game():
 
     state = reset_game()
 
-    while not exit_event.is_set():
+    while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                exit_event.set()
                 pygame.quit()
-                return
+                sys.exit()
             if event.type == pygame.KEYDOWN:
                 if not state["game_over"] and not paused:
                     if event.key == pygame.K_SPACE and state["on_ground"]:
@@ -62,7 +46,6 @@ def run_game():
                         state["on_ground"] = False
                 elif event.key == pygame.K_r:
                     state = reset_game()
-                    update_code_window()
             if event.type == pygame.ACTIVEEVENT:
                 if event.state == 1:
                     paused = not event.gain
@@ -100,9 +83,8 @@ def run_game():
                 if state["score"] % 100 == 0:
                     state["speed"] *= 1.1
                     state["speed_multiplier"] *= 1.1
-                    update_code_window()
 
-            pygame.draw.rect(screen, DINO_COLOR, state["dino"])  # Changed to draw a rectangle
+            pygame.draw.circle(screen, DINO_COLOR, (state["dino"].x + 20, state["dino"].y + 20), 20)
             score_text = font.render(f"Score: {state['score']}", True, (0, 0, 0))
             screen.blit(score_text, (10, 10))
 
@@ -117,68 +99,5 @@ def run_game():
         pygame.display.flip()
         clock.tick(60)
 
-# Here to control the game
-def update_code_window():
-    code_text.delete("1.0", tk.END)
-    code_text.insert(tk.END, get_game_code())
-
-def change_jump(delta):
-    global JUMP_STRENGTH
-    JUMP_STRENGTH = max(-30, min(-2, JUMP_STRENGTH + delta))
-    update_code_window()
-
-def change_obstacle(delta):
-    OBSTACLE_SIZE[0] = max(10, OBSTACLE_SIZE[0] + delta)
-    OBSTACLE_SIZE[1] = max(10, OBSTACLE_SIZE[1] + delta)
-    update_code_window()
-
-def change_speed(delta):
-    global SPEED_MULTIPLIER
-    SPEED_MULTIPLIER = max(0.1, round(SPEED_MULTIPLIER + delta, 2))
-    update_code_window()
-
-def cycle_color(direction):
-    global DINO_COLOR, COLOR_INDEX
-    COLOR_INDEX = (COLOR_INDEX + direction) % len(COLOR_OPTIONS)
-    DINO_COLOR = COLOR_OPTIONS[COLOR_INDEX]
-    update_code_window()
-
-def on_close_all():
-    exit_event.set()
-    root.destroy()
-    code_window.destroy()
-    pygame.quit()
-
-# Game Changing bottom
-
-root = tk.Tk()
-root.title("Dino Controls")
-root.protocol("WM_DELETE_WINDOW", on_close_all)
-
-def add_button_row(label, inc_func, dec_func):
-    frame = tk.Frame(root)
-    frame.pack(fill='x')
-    tk.Label(frame, text=label, width=20).pack(side='left')
-    tk.Button(frame, text="+", command=inc_func).pack(side='left')
-    tk.Button(frame, text="-", command=dec_func).pack(side='left')
-
-add_button_row("Jump Strength", lambda: change_jump(-2), lambda: change_jump(2))
-add_button_row("Obstacle Size", lambda: change_obstacle(5), lambda: change_obstacle(-5))
-add_button_row("Speed Multiplier", lambda: change_speed(0.1), lambda: change_speed(-0.1))
-add_button_row("Dino Color", lambda: cycle_color(1), lambda: cycle_color(-1))
-
-# The window that can show the change of code
-code_window = tk.Toplevel()
-code_window.title("Live Code View")
-code_window.protocol("WM_DELETE_WINDOW", on_close_all)
-code_text = tk.Text(code_window, height=15, width=60)
-code_text.pack()
-update_code_window()
-
-# Start game
-game_thread = Thread(target=run_game)
-game_thread.start()
-
-# Continue to run the game until it end
-root.mainloop()
-exit_event.set()
+if __name__ == "__main__":
+    run_game()
