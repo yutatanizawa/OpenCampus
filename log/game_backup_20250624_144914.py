@@ -1,11 +1,10 @@
 import pygame
 import sys
-import random
 
 # --- Game Settings ---
 GRAVITY = 1.0
-JUMP_STRENGTH = -22.5  # Changed to 0.9 of the previous jump strength
-OBSTACLE_SIZE = [40, 160]  # Doubled the width and height of the obstacle
+JUMP_STRENGTH = -50.0
+OBSTACLE_SIZE = [20, 80]
 SPEED_MULTIPLIER = 1.0
 CHARACTER_IMAGE_PATH = "/mnt/c/workspace/OpenCampus/image/character.png"
 
@@ -21,7 +20,7 @@ def run_game():
     # Load character image
     try:
         character_img = pygame.image.load(CHARACTER_IMAGE_PATH).convert_alpha()
-        character_img = pygame.transform.scale(character_img, (80, 80))  # Doubled the size
+        character_img = pygame.transform.scale(character_img, (40, 40))
     except Exception as e:
         print(f"Error loading character image: {e}")
         pygame.quit()
@@ -31,7 +30,7 @@ def run_game():
 
     def reset_game():
         return {
-            "dino": pygame.Rect(50, 220, 80, 80),  # Adjusted the y position for the new size
+            "dino": pygame.Rect(50, 260, 40, 40),
             "vel_y": 0,
             "on_ground": True,
             "obstacles": [],
@@ -40,7 +39,6 @@ def run_game():
             "speed": 5 * SPEED_MULTIPLIER,
             "speed_multiplier": SPEED_MULTIPLIER,
             "game_over": False,
-            "obstacle_frequency": random.uniform(0.5, 2.0) * 90
         }
 
     state = reset_game()
@@ -62,39 +60,31 @@ def run_game():
                     paused = not event.gain
 
         if not paused:
-            if state["score"] < 1000:
-                screen.fill((255, 255, 255))
-                obstacle_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-                score_color = (0, 0, 0)
-            else:
-                screen.fill((0, 0, 0))
-                obstacle_color = (255, 255, 255)
-                score_color = (255, 255, 255)
+            screen.fill((255, 255, 255))
 
             if not state["game_over"]:
                 state["vel_y"] += GRAVITY
                 state["dino"].y += int(state["vel_y"])
-                if state["dino"].y >= 220:  # Adjusted for new size
-                    state["dino"].y = 220
+                if state["dino"].y >= 260:
+                    state["dino"].y = 260
                     state["vel_y"] = 0
                     state["on_ground"] = True
 
                 state["spawn_timer"] += 1
-                if state["spawn_timer"] > state["obstacle_frequency"]:
+                if state["spawn_timer"] > 90:
                     state["spawn_timer"] = 0
-                    obs_w = OBSTACLE_SIZE[0]
-                    obs_h = OBSTACLE_SIZE[1] if state["score"] < 1000 else int(OBSTACLE_SIZE[1] * 1.65)
-                    state["obstacles"].append((pygame.Rect(800, 300 - obs_h, obs_w, obs_h), obstacle_color))
+                    obs_w, obs_h = OBSTACLE_SIZE
+                    state["obstacles"].append(pygame.Rect(800, 300 - obs_h, obs_w, obs_h))
 
                 new_obstacles = []
-                for obs, color in state["obstacles"]:
+                for obs in state["obstacles"]:
                     obs.x -= int(state["speed"])
                     if obs.x + obs.width > 0:
-                        new_obstacles.append((obs, color))
-                    pygame.draw.rect(screen, color, obs)
+                        new_obstacles.append(obs)
+                    pygame.draw.rect(screen, (255, 0, 0), obs)
                 state["obstacles"] = new_obstacles
 
-                for obs, _ in state["obstacles"]:
+                for obs in state["obstacles"]:
                     if state["dino"].colliderect(obs):
                         state["game_over"] = True
 
@@ -103,16 +93,10 @@ def run_game():
                     state["speed"] *= 1.1
                     state["speed_multiplier"] *= 1.1
 
-                if state["score"] >= 1000:
-                    JUMP_STRENGTH = JUMP_STRENGTH * 1.5
-                    SPEED_MULTIPLIER = 1.5
-                    msg = font.render("Hard Mode On", True, (255, 165, 0))
-                    screen.blit(msg, (300, 10))
-
             # Draw character image instead of a circle
             screen.blit(character_img, state["dino"])
 
-            score_text = font.render(f"Score: {state['score']}", True, score_color)
+            score_text = font.render(f"Score: {state['score']}", True, (0, 0, 0))
             screen.blit(score_text, (10, 10))
 
             if state["game_over"]:

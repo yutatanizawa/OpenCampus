@@ -195,6 +195,50 @@ def open_live_view():
         live_view.after(1000, periodic_refresh)
     periodic_refresh()
 
+def open_backup_manager():
+    try:
+        backups = sorted(
+            [f for f in os.listdir(LOG_DIR) if f.startswith("game_backup_") and f.endswith(".py")],
+            key=lambda f: os.path.getmtime(os.path.join(LOG_DIR, f)),
+            reverse=True
+        )
+        if not backups:
+            messagebox.showinfo("No Backups", "No backups were found.")
+            return
+
+        backup_win = tk.Toplevel()
+        backup_win.title("Backup Management")
+
+        listbox = tk.Listbox(backup_win, width=50, height=15)
+        listbox.pack(padx=10, pady=10)
+
+        for b in backups:
+            listbox.insert(tk.END, b)
+
+        def load_selected_backup():
+            selection = listbox.curselection()
+            if not selection:
+                messagebox.showwarning("No selection", "Please select a backup to restore.")
+                return
+            backup_name = listbox.get(selection[0])
+            backup_path = os.path.join(LOG_DIR, backup_name)
+
+            try:
+                with open(backup_path, "r") as f:
+                    code = f.read()
+                with open(GAME_FILE_PATH, "w") as f:
+                    f.write(code)
+                messagebox.showinfo("Restore Complete", f"{backup_name} has been restored. The game will now restart.")
+                restart_game()
+                backup_win.destroy()
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to restore: {e}")
+
+        tk.Button(backup_win, text="Restore Selected Backup", command=load_selected_backup).pack(pady=(0,10))
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to retrieve the list of backups: {e}")
+
+
 root = tk.Tk()
 root.title("Dino Game Controller")
 root.protocol("WM_DELETE_WINDOW", on_close)
@@ -205,5 +249,7 @@ tk.Button(root, text="Restart Game", command=restart_game, width=20).pack(pady=5
 tk.Button(root, text="AI Code Modify", command=ai_modify_action, width=20).pack(pady=5)
 tk.Button(root, text="Exit", command=on_close, width=20).pack(pady=5)
 tk.Button(root, text="LIVE View", command=open_live_view, width=20).pack(pady=5)
+tk.Button(root, text="load backup", command=open_backup_manager, width=20).pack(pady=5)
+
 
 root.mainloop()

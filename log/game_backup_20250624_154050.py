@@ -62,14 +62,7 @@ def run_game():
                     paused = not event.gain
 
         if not paused:
-            if state["score"] < 1000:
-                screen.fill((255, 255, 255))
-                obstacle_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-                score_color = (0, 0, 0)
-            else:
-                screen.fill((0, 0, 0))
-                obstacle_color = (255, 255, 255)
-                score_color = (255, 255, 255)
+            screen.fill((255, 255, 255))
 
             if not state["game_over"]:
                 state["vel_y"] += GRAVITY
@@ -82,9 +75,9 @@ def run_game():
                 state["spawn_timer"] += 1
                 if state["spawn_timer"] > state["obstacle_frequency"]:
                     state["spawn_timer"] = 0
-                    obs_w = OBSTACLE_SIZE[0]
-                    obs_h = OBSTACLE_SIZE[1] if state["score"] < 1000 else int(OBSTACLE_SIZE[1] * 1.65)
-                    state["obstacles"].append((pygame.Rect(800, 300 - obs_h, obs_w, obs_h), obstacle_color))
+                    obs_w, obs_h = OBSTACLE_SIZE
+                    color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+                    state["obstacles"].append((pygame.Rect(800, 300 - obs_h, obs_w, obs_h), color))
 
                 new_obstacles = []
                 for obs, color in state["obstacles"]:
@@ -103,16 +96,10 @@ def run_game():
                     state["speed"] *= 1.1
                     state["speed_multiplier"] *= 1.1
 
-                if state["score"] >= 1000:
-                    JUMP_STRENGTH = JUMP_STRENGTH * 1.5
-                    SPEED_MULTIPLIER = 1.5
-                    msg = font.render("Hard Mode On", True, (255, 165, 0))
-                    screen.blit(msg, (300, 10))
-
             # Draw character image instead of a circle
             screen.blit(character_img, state["dino"])
 
-            score_text = font.render(f"Score: {state['score']}", True, score_color)
+            score_text = font.render(f"Score: {state['score']}", True, (0, 0, 0))
             screen.blit(score_text, (10, 10))
 
             if state["game_over"]:
